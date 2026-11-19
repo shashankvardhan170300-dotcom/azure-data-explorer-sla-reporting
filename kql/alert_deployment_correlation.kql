@@ -1,0 +1,34 @@
+// Alert-to-deployment correlation — root-cause candidates.
+//
+// For each incident, find deployment / configuration / task-execution events
+// on the SAME cluster that occurred within 60 minutes BEFORE the incident
+// opened. The closest such event is the most likely root-cause candidate.
+// This mirrors the end-to-end root-cause analysis run on cluster telemetry:
+// correlate an alert with the change that preceded it.
+//
+// Expected tables (adjust the names to your cluster):
+//   Incidents: incident_id (string), cluster (string), severity (string),
+//              status (string), opened_at (datetime)
+//   ClusterEvents: event_id (string), cluster (string), service (string),
+//              event_type (string), event_time (datetime), description (string)
+
+let lookback = 60m;
+Incidents
+| join kind=inner (ClusterEvents) on cluster
+| where event_time between ((opened_at - lookback) .. opened_at)
+| extend minutes_before_incident = datetime_diff("minute", opened_at, event_time)
+| summarize arg_max(event_time, *) by incident_id
+| project incident_id, cluster, severity, opened_at,
+          candidate_event_id = event_id,
+          candidate_event_type = event_type,
+          candidate_event_time = event_time,
+          minutes_before_incident,
+          event_description = description
+| order by opened_at desc
+
+// Share of incidents with a candidate change event, by event type:
+// Incidents
+// | join kind=inner (ClusterEvents) on cluster
+// | where event_time between ((opened_at - 60m) .. opened_at)
+// | summarize arg_max(event_time, *) by incident_id
+// | summarize incidents = count() by candidate_event_type = event_type

@@ -1,0 +1,25 @@
+// Incident ageing — how long currently-open incidents have been open,
+// bucketed into the bands used on the SLA dashboard: 0-24h, 24-72h, 72h-7d, 7d+.
+//
+// Expected table (adjust the name to your cluster):
+//   Incidents: incident_id (string), cluster (string), service (string),
+//              severity (string), status (string), opened_at (datetime)
+
+Incidents
+| where status != "Resolved"
+| extend age_hours = datetime_diff("hour", now(), opened_at),
+         age_bucket = case(
+             datetime_diff("hour", now(), opened_at) < 24, "0-24h",
+             datetime_diff("hour", now(), opened_at) < 72, "24-72h",
+             datetime_diff("hour", now(), opened_at) < 168, "72h-7d",
+             "7d+")
+| summarize open_incidents = count() by age_bucket, cluster
+| order by age_bucket asc, cluster asc
+
+// Oldest open incidents, for triage:
+// Incidents
+// | where status != "Resolved"
+// | extend age_hours = datetime_diff("hour", now(), opened_at)
+// | project incident_id, cluster, severity, title, status, opened_at, age_hours
+// | order by age_hours desc
+// | take 50

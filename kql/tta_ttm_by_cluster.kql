@@ -1,0 +1,28 @@
+// TTA / TTM by cluster — mean, median, and p90 of time-to-acknowledge and
+// time-to-mitigate, plus daily trend, for resolved incidents.
+//
+// Expected table (adjust the name to your cluster):
+//   Incidents: incident_id (string), cluster (string), severity (string),
+//              status (string), opened_at (datetime),
+//              tta_minutes (real), ttm_minutes (real)
+
+Incidents
+| where status == "Resolved"
+| summarize tta_mean = round(avg(tta_minutes), 1),
+            tta_median = round(percentile(tta_minutes, 50), 1),
+            tta_p90 = round(percentile(tta_minutes, 90), 1),
+            ttm_mean = round(avg(ttm_minutes), 1),
+            ttm_median = round(percentile(ttm_minutes, 50), 1),
+            ttm_p90 = round(percentile(ttm_minutes, 90), 1),
+            incidents = count()
+  by cluster
+| order by cluster asc
+
+// Daily trend:
+// Incidents
+// | where status == "Resolved"
+// | summarize tta_mean = round(avg(tta_minutes), 1),
+//             ttm_mean = round(avg(ttm_minutes), 1),
+//             incidents = count()
+//   by day = bin(opened_at, 1d)
+// | order by day asc

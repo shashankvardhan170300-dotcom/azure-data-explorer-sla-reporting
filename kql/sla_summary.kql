@@ -1,0 +1,32 @@
+// Cluster SLA summary — SLA compliance by cluster and severity.
+//
+// Expected tables (adjust the names to your cluster):
+//   Incidents: incident_id (string), cluster (string), service (string),
+//              severity (string), status (string), opened_at (datetime),
+//              acknowledged_at (datetime), mitigated_at (datetime),
+//              resolved_at (datetime), tta_minutes (real), ttm_minutes (real)
+//
+// An incident is SLA-compliant when BOTH its time-to-acknowledge (TTA) and
+// its time-to-mitigate (TTM) fall within the target for its severity.
+// Open incidents (no mitigation time yet) are excluded from compliance %.
+
+let sla_targets = datatable(severity:string, tta_target_min:int, ttm_target_min:int)
+[
+    "Sev1", 15, 240,
+    "Sev2", 30, 480,
+    "Sev3", 120, 1440,
+    "Sev4", 480, 4320
+];
+Incidents
+| where status == "Resolved"
+| join kind=inner sla_targets on severity
+| extend tta_within_sla = tta_minutes <= tta_target_min,
+         ttm_within_sla = ttm_minutes <= ttm_target_min,
+         sla_compliant = (tta_minutes <= tta_target_min) and (ttm_minutes <= ttm_target_min)
+| summarize incidents = count(),
+            compliant = countif(sla_compliant),
+            compliance_pct = round(100.0 * countif(sla_compliant) / count(), 1),
+            tta_breaches = countif(not(tta_within_sla)),
+            ttm_breaches = countif(not(ttm_within_sla))
+  by cluster, severity
+| order by cluster asc, severity asc
